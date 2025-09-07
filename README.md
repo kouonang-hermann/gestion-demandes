@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Gestion des Demandes de Matériel
 
 Application de gestion des demandes de matériel et outillage pour projets de construction.
@@ -110,3 +111,6 @@ Après avoir exécuté le seed, vous pouvez vous connecter avec :
 - Validation des données avec Zod
 - Permissions basées sur les rôles
 - Protection CSRF intégrée à Next.js
+=======
+# gestion-demandes
+>>>>>>> 386ca901c183a8261cf5a79c4bc82e6ce96f9536
