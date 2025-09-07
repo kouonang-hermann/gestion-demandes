@@ -1,0 +1,231 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+enum UserRole {
+  superadmin
+  technicien
+  conducteur_travaux
+  responsable_qhse
+  responsable_appro
+  charge_affaire
+  responsable_logistique
+}
+
+enum DemandeType {
+  materiel
+  outillage
+}
+
+enum DemandeStatus {
+  brouillon
+  soumise
+  en_attente_validation_conducteur
+  en_attente_validation_qhse
+  validee_conducteur
+  validee_qhse
+  en_attente_validation_appro
+  validee_appro
+  en_attente_validation_charge_affaire
+  validee_charge_affaire
+  en_attente_validation_logistique
+  validee_logistique
+  en_attente_confirmation_demandeur
+  confirmee_demandeur
+  rejetee
+  archivee
+}
+
+model User {
+  id        String   @id @default(cuid())
+  nom       String
+  prenom    String
+  email     String   @unique
+  password  String
+  role      UserRole
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  projets                   UserProjet[]
+  demandesCreees           Demande[]                @relation("DemandeCreateur")
+  validationSignatures    ValidationSignature[]
+  sortiesAppro             SortieSignature[]        @relation("SortieAppro")
+  historyEntries           HistoryEntry[]
+  notifications            Notification[]
+  projetsCreated           Projet[]                 @relation("ProjetCreateur")
+
+  @@map("users")
+}
+
+model Projet {
+  id          String    @id @default(cuid())
+  nom         String
+  description String
+  dateDebut   DateTime
+  dateFin     DateTime?
+  actif       Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  createdBy    String
+  createur     User           @relation("ProjetCreateur", fields: [createdBy], references: [id])
+  utilisateurs UserProjet[]
+  demandes     Demande[]
+  notifications Notification[]
+
+  @@map("projets")
+}
+
+model UserProjet {
+  id       String @id @default(cuid())
+  userId   String
+  projetId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projet Projet @relation(fields: [projetId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projetId])
+  @@map("user_projets")
+}
+
+model Article {
+  id           String      @id @default(cuid())
+  nom          String
+  description  String
+  reference    String      @unique
+  unite        String
+  type         DemandeType
+  stock        Int?
+  prixUnitaire Float?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  itemsDemande ItemDemande[]
+
+  @@map("articles")
+}
+
+model Demande {
+  id                    String        @id @default(cuid())
+  numero                String        @unique
+  projetId              String
+  technicienId          String
+  type                  DemandeType
+  status                DemandeStatus @default(brouillon)
+  dateCreation          DateTime      @default(now())
+  dateModification      DateTime      @updatedAt
+  dateSortie            DateTime?
+  dateValidationFinale  DateTime?
+  commentaires          String?
+  rejetMotif            String?
+
+  // Relations
+  projet                Projet                 @relation(fields: [projetId], references: [id])
+  technicien            User                   @relation("DemandeCreateur", fields: [technicienId], references: [id])
+  items                 ItemDemande[]
+  validationSignatures ValidationSignature[]
+  sortieAppro           SortieSignature?       @relation("SortieAppro")
+  historyEntries        HistoryEntry[]
+  notifications         Notification[]
+
+  @@map("demandes")
+}
+
+model ItemDemande {
+  id                String  @id @default(cuid())
+  demandeId         String
+  articleId         String
+  quantiteDemandee  Int
+  quantiteValidee   Int?
+  quantiteSortie    Int?
+  quantiteRecue     Int?
+  commentaire       String?
+
+  // Relations
+  demande Demande @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  article Article @relation(fields: [articleId], references: [id])
+
+  @@map("item_demandes")
+}
+
+model ValidationSignature {
+  id          String   @id @default(cuid())
+  userId      String
+  demandeId   String
+  date        DateTime @default(now())
+  commentaire String?
+  signature   String
+  type        String   // "conducteur", "qhse", "charge_affaire", "finale"
+
+  // Relations
+  user    User    @relation(fields: [userId], references: [id])
+  demande Demande @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+
+  @@unique([demandeId, type])
+  @@map("validation_signatures")
+}
+
+model SortieSignature {
+  id                      String   @id @default(cuid())
+  userId                  String
+  demandeId               String   @unique
+  date                    DateTime @default(now())
+  commentaire             String?
+  signature               String
+  quantitesSorties        Json     // { itemId: quantite }
+  modifiable              Boolean  @default(true)
+  dateModificationLimite  DateTime
+
+  // Relations
+  user    User    @relation("SortieAppro", fields: [userId], references: [id])
+  demande Demande @relation("SortieAppro", fields: [demandeId], references: [id])
+
+  @@map("sortie_signatures")
+}
+
+model HistoryEntry {
+  id             String        @id @default(cuid())
+  demandeId      String
+  userId         String
+  action         String
+  ancienStatus   DemandeStatus?
+  nouveauStatus  DemandeStatus?
+  commentaire    String?
+  timestamp      DateTime      @default(now())
+  signature      String
+
+  // Relations
+  demande Demande @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@map("history_entries")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  titre     String
+  message   String
+  lu        Boolean  @default(false)
+  createdAt DateTime @default(now())
+  demandeId String?
+  projetId  String?
+
+  // Relations
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  demande Demande? @relation(fields: [demandeId], references: [id], onDelete: Cascade)
+  projet  Projet?  @relation(fields: [projetId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
